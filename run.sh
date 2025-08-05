@@ -24,18 +24,14 @@ trap cleanup INT TERM
 
 # Start backend
 echo "🔧 Starting backend..."
-cd backend && python main.py &
+(cd backend && python main.py) &
 BACKEND_PID=$!
-cd ..
 
 # Start frontend (if Node.js is available)
 if command -v npm >/dev/null 2>&1; then
     echo "🎨 Starting frontend..."
-    cd frontend
-    [ ! -d "node_modules" ] && npm install
-    npm run dev &
+    (cd frontend && [ ! -d "node_modules" ] && npm install; npm run dev) &
     FRONTEND_PID=$!
-    cd ..
     
     echo ""
     echo "✅ Services started!"

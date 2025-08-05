@@ -65,8 +65,13 @@ class GateioExchange(BaseExchange):
             return
         
         if not isinstance(message, dict):
-            logger.debug(f"Gate.io unknown message type: {type(message)}")
-            return
+            if isinstance(message, list):
+                logger.debug(f"Gate.io list message: {message}")
+                await self._handle_list_price_update(message)
+                return
+            else:
+                logger.debug(f"Gate.io unknown message type: {type(message)}")
+                return
             
         logger.debug(f"Gate.io message: {message}")
         
@@ -98,7 +103,13 @@ class GateioExchange(BaseExchange):
         if not result:
             return
         
-        await self._process_ticker_data(result)
+        # GateIO result is a list of ticker objects
+        if isinstance(result, list):
+            for ticker_data in result:
+                if isinstance(ticker_data, dict):
+                    await self._process_ticker_data(ticker_data)
+        else:
+            await self._process_ticker_data(result)
     
     async def _handle_list_price_update(self, message: list):
         """Handle ticker price updates in list format."""
@@ -122,24 +133,30 @@ class GateioExchange(BaseExchange):
         
         symbol = self._convert_from_gateio_symbol(contract)
         
-        # Get price data
+        # Get price data - GateIO doesn't provide bid/ask in ticker, use last price
         last_price = data.get('last')
-        bid_price = data.get('bid1_price')
-        ask_price = data.get('ask1_price')
+        mark_price = data.get('mark_price')
         
-        if not all([last_price, bid_price, ask_price]):
-            logger.debug(f"Gate.io {contract}: Missing price data - last={last_price}, bid={bid_price}, ask={ask_price}")
+        if not last_price:
+            logger.debug(f"Gate.io {contract}: Missing price data - last={last_price}")
             return
         
         try:
             price = float(last_price)
-            bid = float(bid_price)
-            ask = float(ask_price)
+            # Use mark_price as both bid and ask since GateIO doesn't provide separate bid/ask in ticker
+            mark = float(mark_price) if mark_price else price
+            
+            # Create small spread around mark price for bid/ask
+            spread = price * 0.0001  # 0.01% spread
+            bid = mark - spread/2
+            ask = mark + spread/2
             
             # Improved timestamp parsing
             timestamp = self._parse_gateio_timestamp(data)
             
+            logger.debug(f"Gate.io {symbol}: price={price}, bid={bid}, ask={ask}")
             price_data = self.format_price_data(symbol, price, bid, ask, timestamp)
+            logger.debug(f"Gate.io emitting price update for {symbol}: {price_data}")
             self.emit('price_update', price_data)
             
         except (ValueError, TypeError) as e:

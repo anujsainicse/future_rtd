@@ -25,8 +25,8 @@ class PhemexExchange(BaseExchange):
         
         message = {
             'id': self.req_id,
-            'method': 'book.subscribe',
-            'params': [phemex_symbol]
+            'method': 'orderbook.subscribe',
+            'params': [phemex_symbol, 20]  # Symbol and depth level
         }
         self.req_id += 1
         return message
@@ -36,7 +36,7 @@ class PhemexExchange(BaseExchange):
         
         message = {
             'id': self.req_id,
-            'method': 'book.unsubscribe',
+            'method': 'orderbook.unsubscribe',
             'params': [phemex_symbol]
         }
         self.req_id += 1
@@ -80,24 +80,86 @@ class PhemexExchange(BaseExchange):
         logger.debug(f"Phemex message: {message}")
         
         # Handle subscription confirmation
-        if message.get('id') and message.get('result', {}).get('status') == 'success':
-            logger.info(f"Phemex subscription confirmed for request {message['id']}")
-            return
+        result = message.get('result')
+        if message.get('id') and result is not None:
+            if isinstance(result, dict) and result.get('status') == 'success':
+                logger.info(f"Phemex subscription confirmed for request {message['id']}")
+                return
+            elif isinstance(result, str):
+                if result == 'pong':
+                    logger.debug(f"Phemex pong response for request {message['id']}")
+                    return
+                else:
+                    logger.debug(f"Phemex string result for request {message['id']}: {result}")
+                    return
         
         # Handle error responses
         if message.get('error'):
             logger.error(f"Phemex error: {message['error']}")
             return
         
-        # Handle book data updates
-        if message.get('method') == 'book.update' and 'params' in message:
-            logger.debug(f"Phemex book data: {message['params']}")
+        # Handle orderbook data updates (new format)
+        if 'book' in message and 'symbol' in message:
+            logger.debug(f"Phemex orderbook data: symbol={message['symbol']}, book={message['book']}")
+            await self._handle_direct_orderbook_update(message)
+        # Handle orderbook data updates (old format - keeping for compatibility)
+        elif message.get('method') == 'orderbook.update' and 'params' in message:
+            logger.debug(f"Phemex orderbook data: {message['params']}")
             await self._handle_price_update(message)
         else:
             logger.debug(f"Phemex unknown message format: {message.keys()}")
     
+    async def _handle_direct_orderbook_update(self, message: Dict):
+        """Handle direct orderbook updates (new Phemex format)."""
+        phemex_symbol = message.get('symbol')
+        book_data = message.get('book', {})
+        
+        if not phemex_symbol or not book_data:
+            return
+        
+        # Get symbol and convert to standard format
+        symbol = self._convert_from_phemex_symbol(phemex_symbol)
+        
+        # Get price data from book
+        bids = book_data.get('bids', [])
+        asks = book_data.get('asks', [])
+        
+        # For incremental updates, we need both bids and asks with actual values
+        valid_bids = [bid for bid in bids if len(bid) >= 2 and bid[1] > 0]
+        valid_asks = [ask for ask in asks if len(ask) >= 2 and ask[1] > 0]
+        
+        if not valid_bids or not valid_asks:
+            logger.debug(f"Phemex {phemex_symbol}: Incomplete orderbook data - bids={len(valid_bids)}, asks={len(valid_asks)}")
+            return
+        
+        # Get symbol-specific scale factor
+        scale = self.scale_factors.get(phemex_symbol, 10000)  # Default to 10000
+        
+        try:
+            # Get best bid and ask (prices are scaled integers)
+            best_bid_raw = valid_bids[0][0]
+            best_ask_raw = valid_asks[0][0]
+            
+            # Scale down to actual prices
+            best_bid = float(best_bid_raw) / scale
+            best_ask = float(best_ask_raw) / scale
+            
+            # Use mid price as the last price
+            price = (best_bid + best_ask) / 2
+            timestamp = int(message.get('timestamp', 0)) // 1000000  # Convert nanoseconds to milliseconds
+            
+            logger.debug(f"Phemex {phemex_symbol}: price={price:.8f}, bid={best_bid:.8f}, ask={best_ask:.8f}, scale={scale}")
+            
+            price_data = self.format_price_data(symbol, price, best_bid, best_ask, timestamp)
+            logger.debug(f"Phemex emitting price update for {symbol}: {price_data}")
+            self.emit('price_update', price_data)
+            
+        except (ValueError, TypeError, IndexError) as e:
+            logger.error(f"Error processing Phemex price data for {phemex_symbol}: {e}")
+            logger.debug(f"Raw bids: {valid_bids[:3]}, Raw asks: {valid_asks[:3]}")
+
     async def _handle_price_update(self, message: Dict):
-        """Handle order book price updates."""
+        """Handle order book price updates (old format - keeping for compatibility)."""
         params = message.get('params')
         if not params or len(params) < 2:
             return
@@ -154,5 +216,5 @@ class PhemexExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Phemex format."""
-        return self._convert_to_phemex_symbol(symbol)
+        """Normalize symbol to standard format."""
+        return symbol.upper()

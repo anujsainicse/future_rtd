@@ -10,34 +10,32 @@ class BitgetExchange(BaseExchange):
         self.req_id = 1
     
     def get_websocket_url(self) -> str:
-        return 'wss://ws.bitget.com/mix/v1/stream'
+        return 'wss://ws.bitget.com/v2/ws/public'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # Bitget futures use different channel format
-        bitget_symbol = self._convert_to_bitget_symbol(symbol)
+        # Bitget futures use USDT-FUTURES instType with standard symbol format
         
         message = {
             'op': 'subscribe',
             'args': [
                 {
-                    'instType': 'UMCBL',
+                    'instType': 'USDT-FUTURES',
                     'channel': 'ticker',
-                    'instId': bitget_symbol
+                    'instId': symbol
                 }
             ]
         }
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        bitget_symbol = self._convert_to_bitget_symbol(symbol)
         
         message = {
             'op': 'unsubscribe',
             'args': [
                 {
-                    'instType': 'UMCBL',
+                    'instType': 'USDT-FUTURES',
                     'channel': 'ticker',
-                    'instId': bitget_symbol
+                    'instId': symbol
                 }
             ]
         }
@@ -109,13 +107,13 @@ class BitgetExchange(BaseExchange):
         
         for data in data_list:
             try:
-                # Get instrument ID and convert to standard symbol
+                # Get instrument ID - now uses standard symbol format
                 inst_id = data.get('instId')
                 if not inst_id:
                     logger.debug(f"Bitget: Missing instId in data: {data.keys()}")
                     continue
                 
-                symbol = self._convert_from_bitget_symbol(inst_id)
+                symbol = inst_id  # No conversion needed anymore
                 
                 # Get price data - Bitget uses specific field names
                 last_price = data.get('lastPr')
@@ -137,7 +135,9 @@ class BitgetExchange(BaseExchange):
                     logger.debug(f"Bitget {inst_id}: Invalid price values - price={price}, bid={bid}, ask={ask}")
                     continue
                 
+                logger.debug(f"Bitget {symbol}: price={price}, bid={bid}, ask={ask}")
                 price_data = self.format_price_data(symbol, price, bid, ask, timestamp)
+                logger.debug(f"Bitget emitting price update for {symbol}: {price_data}")
                 self.emit('price_update', price_data)
                 
             except (ValueError, TypeError) as e:
@@ -150,5 +150,5 @@ class BitgetExchange(BaseExchange):
         return None
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Bitget format."""
-        return self._convert_to_bitget_symbol(symbol)
+        """Bitget now uses standard symbol format."""
+        return symbol.upper()

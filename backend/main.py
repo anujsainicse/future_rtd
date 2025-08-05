@@ -435,6 +435,60 @@ async def get_best_prices(symbol: str):
     
     return best_prices
 
+@app.post("/api/reload-config")
+async def reload_configuration():
+    """Reload the futures_symbols.txt configuration file."""
+    global price_fetcher
+    
+    if not price_fetcher:
+        return {"error": "Price fetcher not initialized"}
+    
+    try:
+        # Disconnect all existing exchanges
+        for exchange in price_fetcher.exchanges.values():
+            try:
+                await exchange.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting exchange: {e}")
+        
+        # Clear existing data
+        price_fetcher.exchanges.clear()
+        price_fetcher.active_connections.clear()
+        
+        # Reload configuration and reinitialize
+        futures_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'futures_symbols.txt')
+        symbols_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'symbols.csv')
+        
+        config_file = futures_file if os.path.exists(futures_file) else symbols_file
+        logger.info(f"Reloading configuration from: {config_file}")
+        
+        parsed_data = await InputParser.parse_file(config_file)
+        valid_exchanges = InputParser.validate_exchange_support(
+            parsed_data['exchanges'], 
+            price_fetcher.supported_exchanges
+        )
+        
+        config_data = {
+            'exchanges': valid_exchanges,
+            'format': parsed_data.get('format', 'legacy'),
+            'pairs': parsed_data.get('pairs', [])
+        }
+        
+        # Initialize exchanges with new config
+        await price_fetcher.initialize_exchanges(config_data)
+        
+        return {
+            "status": "success",
+            "message": f"Configuration reloaded with {len(valid_exchanges)} exchanges",
+            "exchanges": list(valid_exchanges.keys()),
+            "total_symbols": sum(len(symbols) for symbols in valid_exchanges.values()),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error reloading configuration: {e}")
+        return {"error": f"Failed to reload configuration: {str(e)}"}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time price updates."""

@@ -88,7 +88,7 @@ class CryptoFuturesPriceFetcher:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
-    async def load_input_file(self, file_path: str) -> Dict[str, List[str]]:
+    async def load_input_file(self, file_path: str) -> Dict:
         """Load and parse input file."""
         try:
             logger.info(f"Loading input file: {file_path}")
@@ -99,18 +99,29 @@ class CryptoFuturesPriceFetcher:
                 self.supported_exchanges
             )
             
-            total_pairs = sum(len(symbols) for symbols in valid_exchanges.values())
+            # Calculate total pairs based on format
+            if parsed_data.get('format') == 'symbol_ticker':
+                total_pairs = sum(len(symbols) for symbols in valid_exchanges.values())
+            else:
+                total_pairs = sum(len(symbols) for symbols in valid_exchanges.values())
+            
             logger.info(f"Loaded {total_pairs} symbol pairs across {len(valid_exchanges)} exchanges")
             
-            return valid_exchanges
+            return {
+                'exchanges': valid_exchanges,
+                'format': parsed_data.get('format', 'legacy'),
+                'pairs': parsed_data.get('pairs', [])
+            }
             
         except Exception as e:
             logger.error(f"Failed to load input file: {e}")
             sys.exit(1)
     
-    async def initialize_exchanges(self, exchange_config: Dict[str, List[str]]):
+    async def initialize_exchanges(self, config_data: Dict):
         """Initialize and connect to exchanges."""
         tasks = []
+        exchange_config = config_data['exchanges']
+        config_format = config_data.get('format', 'legacy')
         
         for exchange_name, symbols in exchange_config.items():
             if exchange_name not in self.exchange_classes:
@@ -122,13 +133,17 @@ class CryptoFuturesPriceFetcher:
             
             self.exchanges[exchange_name] = exchange
             
-            # Setup event handlers
-            exchange.on('price_update', self.price_manager.update_price)
+            # Setup event handlers with symbol mapping support
+            if config_format == 'symbol_ticker':
+                exchange.on('price_update', lambda data, ex=exchange_name: self._handle_price_update_with_mapping(data, ex, config_data['pairs']))
+            else:
+                exchange.on('price_update', self.price_manager.update_price)
+            
             exchange.on('error', lambda error, ex=exchange_name: logger.error(f"Exchange {ex} error: {error}"))
             exchange.on('max_reconnect_attempts_reached', 
                        lambda ex=exchange_name: self._handle_exchange_failure(ex))
             
-            tasks.append(self._connect_to_exchange(exchange, symbols))
+            tasks.append(self._connect_to_exchange(exchange, symbols, config_format))
         
         # Connect to all exchanges concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -139,23 +154,58 @@ class CryptoFuturesPriceFetcher:
                 exchange_name = list(exchange_config.keys())[i]
                 logger.error(f"Failed to initialize {exchange_name}: {result}")
     
-    async def _connect_to_exchange(self, exchange, symbols: List[str]):
+    async def _connect_to_exchange(self, exchange, symbols, config_format='legacy'):
         """Connect to an exchange and subscribe to symbols."""
         try:
             await exchange.connect()
             self.active_connections.add(exchange.name)
             
             # Subscribe to symbols with small delays to avoid rate limits
-            for symbol in symbols:
-                try:
-                    await exchange.subscribe(symbol)
-                    await asyncio.sleep(0.1)  # Small delay between subscriptions
-                except Exception as e:
-                    logger.error(f"Failed to subscribe to {symbol} on {exchange.name}: {e}")
+            if config_format == 'symbol_ticker':
+                # symbols is a list of dicts with display_symbol and ticker
+                for symbol_data in symbols:
+                    try:
+                        ticker = symbol_data['ticker']
+                        await exchange.subscribe(ticker)
+                        await asyncio.sleep(0.1)  # Small delay between subscriptions
+                    except Exception as e:
+                        logger.error(f"Failed to subscribe to {symbol_data} on {exchange.name}: {e}")
+            else:
+                # Legacy format - symbols is a list of strings
+                for symbol in symbols:
+                    try:
+                        await exchange.subscribe(symbol)
+                        await asyncio.sleep(0.1)  # Small delay between subscriptions
+                    except Exception as e:
+                        logger.error(f"Failed to subscribe to {symbol} on {exchange.name}: {e}")
             
         except Exception as e:
             logger.error(f"Failed to connect to {exchange.name}: {e}")
             raise
+    
+    def _handle_price_update_with_mapping(self, data, exchange_name, pairs):
+        """Handle price updates with ticker to display symbol mapping."""
+        ticker = data['symbol']
+        
+        # Find the display symbol for this ticker and exchange
+        display_symbol = None
+        for pair in pairs:
+            if pair['exchange'] == exchange_name and pair['ticker'] == ticker:
+                display_symbol = pair['display_symbol']
+                break
+        
+        if display_symbol:
+            # Update the data with display symbol
+            updated_data = data.copy()
+            updated_data['symbol'] = display_symbol
+            updated_data['ticker'] = ticker  # Keep original ticker for reference
+            
+            # Pass to price manager
+            self.price_manager.update_price(updated_data)
+        else:
+            # Fallback to original symbol if no mapping found
+            logger.warning(f"No display symbol mapping found for {ticker} on {exchange_name}")
+            self.price_manager.update_price(data)
     
     def _handle_exchange_failure(self, exchange_name: str):
         """Handle exchange connection failure."""
@@ -188,14 +238,14 @@ class CryptoFuturesPriceFetcher:
         logger.info("🚀 Starting Crypto Futures Price Fetcher...")
         
         # Load input file
-        exchange_config = await self.load_input_file(input_file)
+        config_data = await self.load_input_file(input_file)
         
-        if not exchange_config:
+        if not config_data['exchanges']:
             logger.error("No supported exchanges found in input file")
             sys.exit(1)
         
         # Initialize exchanges
-        await self.initialize_exchanges(exchange_config)
+        await self.initialize_exchanges(config_data)
         
         if not self.active_connections:
             logger.error("No active exchange connections established")
@@ -251,7 +301,7 @@ class CryptoFuturesPriceFetcher:
 
 @click.command()
 @click.option('-i', '--input', 'input_file', required=True, 
-              help='Input file path (CSV or JSON)')
+              help='Input file path (CSV, JSON, or TXT with symbol:ticker:exchange format)')
 @click.option('-s', '--summary-interval', default=30, 
               help='Summary display interval in seconds (default: 30)')
 @click.option('-v', '--verbose', is_flag=True, 

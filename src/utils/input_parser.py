@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class InputParser:
     @staticmethod
     async def parse_file(file_path: str) -> Dict:
-        """Parse input file (CSV or JSON) and return exchange/symbol configuration."""
+        """Parse input file (CSV, JSON, or TXT) and return exchange/symbol configuration."""
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Input file not found: {file_path}")
         
@@ -20,8 +20,10 @@ class InputParser:
             return await InputParser._parse_csv(file_path)
         elif file_extension == '.json':
             return await InputParser._parse_json(file_path)
+        elif file_extension == '.txt':
+            return await InputParser._parse_txt(file_path)
         else:
-            raise ValueError(f"Unsupported file format: {file_extension}. Supported formats: .csv, .json")
+            raise ValueError(f"Unsupported file format: {file_extension}. Supported formats: .csv, .json, .txt")
     
     @staticmethod
     async def _parse_csv(file_path: str) -> Dict:
@@ -93,7 +95,59 @@ class InputParser:
             raise ValueError(f"Failed to parse JSON file: {str(e)}")
     
     @staticmethod
-    def validate_exchange_support(exchanges: Dict[str, List[str]], supported_exchanges: List[str]) -> Dict[str, List[str]]:
+    async def _parse_txt(file_path: str) -> Dict:
+        """Parse TXT file format with symbol:ticker:exchange structure."""
+        try:
+            results = []
+            exchange_symbols: Dict[str, List[Dict[str, str]]] = {}
+            
+            with open(file_path, 'r', encoding='utf-8') as file:
+                for line_num, line in enumerate(file, start=1):
+                    line = line.strip()
+                    if not line or line.startswith('#'):  # Skip empty lines and comments
+                        continue
+                    
+                    # Parse symbol:ticker:exchange format
+                    parts = line.split(':')
+                    if len(parts) != 3:
+                        logger.warning(f"Skipping invalid line {line_num}: '{line}' (expected format: symbol:ticker:exchange)")
+                        continue
+                    
+                    display_symbol = parts[0].strip()
+                    ticker = parts[1].strip()
+                    exchange = parts[2].strip().lower()
+                    
+                    if not display_symbol or not ticker or not exchange:
+                        logger.warning(f"Skipping invalid line {line_num}: empty values in '{line}'")
+                        continue
+                    
+                    if exchange not in exchange_symbols:
+                        exchange_symbols[exchange] = []
+                    
+                    # Store both display symbol and ticker for each exchange
+                    symbol_data = {
+                        'display_symbol': display_symbol,
+                        'ticker': ticker
+                    }
+                    
+                    exchange_symbols[exchange].append(symbol_data)
+                    results.append({
+                        'exchange': exchange, 
+                        'display_symbol': display_symbol,
+                        'ticker': ticker
+                    })
+            
+            return {
+                'exchanges': exchange_symbols, 
+                'pairs': results,
+                'format': 'symbol_ticker'  # Flag to indicate new format
+            }
+            
+        except Exception as e:
+            raise ValueError(f"Failed to parse TXT file: {str(e)}")
+    
+    @staticmethod
+    def validate_exchange_support(exchanges: Dict, supported_exchanges: List[str]) -> Dict:
         """Filter exchanges to only include supported ones."""
         unsupported = [ex for ex in exchanges.keys() if ex not in supported_exchanges]
         

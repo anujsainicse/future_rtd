@@ -1,0 +1,205 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply bg-gray-950 text-white antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-gray-900 border border-gray-800 rounded-lg shadow-lg;
+  }
+  
+  .card-header {
+    @apply px-6 py-4 border-b border-gray-800;
+  }
+  
+  .card-body {
+    @apply px-6 py-4;
+  }
+  
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-950;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-600 hover:bg-primary-700 focus:ring-primary-500 text-white;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-gray-700 hover:bg-gray-600 focus:ring-gray-500 text-white;
+  }
+  
+  .btn-success {
+    @apply btn bg-green-600 hover:bg-green-700 focus:ring-green-500 text-white;
+  }
+  
+  .btn-danger {
+    @apply btn bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white;
+  }
+  
+  .input {
+    @apply w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-white placeholder-gray-400;
+  }
+  
+  .select {
+    @apply input appearance-none bg-gray-800 cursor-pointer;
+  }
+  
+  .table {
+    @apply w-full text-sm text-left;
+  }
+  
+  .table th {
+    @apply px-6 py-3 bg-gray-800 text-gray-300 font-semibold text-xs uppercase tracking-wider;
+  }
+  
+  .table td {
+    @apply px-6 py-4 whitespace-nowrap border-b border-gray-800;
+  }
+  
+  .table tr:hover {
+    @apply bg-gray-800/50;
+  }
+  
+  .price-up {
+    @apply text-green-400;
+  }
+  
+  .price-down {
+    @apply text-red-400;
+  }
+  
+  .price-neutral {
+    @apply text-gray-300;
+  }
+  
+  .exchange-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider;
+  }
+  
+  .exchange-binance {
+    @apply exchange-badge bg-yellow-900 text-yellow-300;
+  }
+  
+  .exchange-bybit {
+    @apply exchange-badge bg-orange-900 text-orange-300;
+  }
+  
+  .exchange-okx {
+    @apply exchange-badge bg-blue-900 text-blue-300;
+  }
+  
+  .exchange-kucoin {
+    @apply exchange-badge bg-green-900 text-green-300;
+  }
+  
+  .exchange-deribit {
+    @apply exchange-badge bg-purple-900 text-purple-300;
+  }
+  
+  .exchange-bitget {
+    @apply exchange-badge bg-cyan-900 text-cyan-300;
+  }
+  
+  .exchange-gateio {
+    @apply exchange-badge bg-indigo-900 text-indigo-300;
+  }
+  
+  .exchange-mexc {
+    @apply exchange-badge bg-teal-900 text-teal-300;
+  }
+  
+  .exchange-bitmex {
+    @apply exchange-badge bg-red-900 text-red-300;
+  }
+  
+  .exchange-phemex {
+    @apply exchange-badge bg-pink-900 text-pink-300;
+  }
+  
+  .loading-skeleton {
+    @apply animate-pulse bg-gray-800 rounded;
+  }
+  
+  .status-indicator {
+    @apply inline-block w-2 h-2 rounded-full;
+  }
+  
+  .status-connected {
+    @apply status-indicator bg-green-500 animate-pulse;
+  }
+  
+  .status-disconnected {
+    @apply status-indicator bg-red-500;
+  }
+  
+  .status-connecting {
+    @apply status-indicator bg-yellow-500 animate-pulse;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent;
+  }
+  
+  .border-gradient {
+    @apply border border-transparent bg-gradient-to-r from-primary-500 to-primary-700 bg-clip-border;
+  }
+  
+  .shadow-glow {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom animations */
+@keyframes flash {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.flash-animation {
+  animation: flash 0.5s ease-in-out;
+}
+
+/* Price change animations */
+.price-flash-up {
+  animation: flash-green 0.5s ease-in-out;
+}
+
+.price-flash-down {
+  animation: flash-red 0.5s ease-in-out;
+}
+
+@keyframes flash-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(34, 197, 94, 0.2); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(239, 68, 68, 0.2); }
+  100% { background-color: transparent; }
+}

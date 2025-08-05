@@ -1,0 +1,1 @@
+- Learned about LS (list) command in Unix/Linux systems

@@ -1,0 +1,14 @@
+[
+  {"exchange": "binance", "symbol": "BTCUSDT"},
+  {"exchange": "binance", "symbol": "ETHUSDT"},
+  {"exchange": "binance", "symbol": "ADAUSDT"},
+  {"exchange": "binance", "symbol": "SOLUSDT"},
+  {"exchange": "bybit", "symbol": "BTCUSDT"},
+  {"exchange": "bybit", "symbol": "ETHUSDT"},
+  {"exchange": "bybit", "symbol": "ADAUSDT"},
+  {"exchange": "bybit", "symbol": "SOLUSDT"},
+  {"exchange": "okx", "symbol": "BTC-USDT"},
+  {"exchange": "okx", "symbol": "ETH-USDT"},
+  {"exchange": "okx", "symbol": "ADA-USDT"},
+  {"exchange": "okx", "symbol": "SOL-USDT"}
+]

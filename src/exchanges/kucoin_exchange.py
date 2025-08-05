@@ -59,13 +59,11 @@ class KucoinExchange(BaseExchange):
         return await super().connect()
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # KuCoin uses different symbol format for futures
-        kucoin_symbol = symbol.replace('USDT', 'USDTM')  # Convert BTCUSDT to BTCUSDTM
-        
+        # Symbol is already in KuCoin format from configuration
         message = {
             'id': self.req_id,
             'type': 'subscribe',
-            'topic': f'/contractMarket/ticker:{kucoin_symbol}',
+            'topic': f'/contractMarket/ticker:{symbol}',
             'privateChannel': False,
             'response': True
         }
@@ -73,12 +71,11 @@ class KucoinExchange(BaseExchange):
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        kucoin_symbol = symbol.replace('USDT', 'USDTM')
-        
+        # Symbol is already in KuCoin format from configuration
         message = {
             'id': self.req_id,
             'type': 'unsubscribe',
-            'topic': f'/contractMarket/ticker:{kucoin_symbol}',
+            'topic': f'/contractMarket/ticker:{symbol}',
             'privateChannel': False,
             'response': True
         }
@@ -123,8 +120,8 @@ class KucoinExchange(BaseExchange):
             return
         
         kucoin_symbol = topic.split(':')[1]
-        # Convert back to standard format (BTCUSDTM -> BTCUSDT)
-        symbol = kucoin_symbol.replace('USDTM', 'USDT')
+        # Use KuCoin symbol directly - mapping will handle display symbol conversion
+        symbol = kucoin_symbol
         
         # Get price data
         price = float(data.get('price', 0))
@@ -147,5 +144,5 @@ class KucoinExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to KuCoin format."""
-        return symbol.replace('USDT', 'USDTM')
+        """Normalize symbol format - keep KuCoin format for output."""
+        return symbol.upper()

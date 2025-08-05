@@ -11,7 +11,8 @@ class PhemexExchange(BaseExchange):
         # Phemex scale factors for different symbols
         self.scale_factors = {
             'BTCUSD': 10000,  # 4 decimal places
-            'ETHUSD': 10000,  # 4 decimal places
+            'cETHUSD': 10000,  # 4 decimal places (ETH perpetual contract)
+            'ETHUSD': 10000,  # 4 decimal places (legacy)
             'XRPUSD': 100000000,  # 8 decimal places
             'ADAUSD': 100000000,  # 8 decimal places
         }
@@ -20,47 +21,25 @@ class PhemexExchange(BaseExchange):
         return 'wss://ws.phemex.com'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # Phemex uses different symbol format
-        phemex_symbol = self._convert_to_phemex_symbol(symbol)
-        
+        # Symbol is already in Phemex format from configuration
         message = {
             'id': self.req_id,
             'method': 'orderbook.subscribe',
-            'params': [phemex_symbol, 20]  # Symbol and depth level
+            'params': [symbol, 20]  # Symbol and depth level
         }
         self.req_id += 1
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        phemex_symbol = self._convert_to_phemex_symbol(symbol)
-        
+        # Symbol is already in Phemex format from configuration
         message = {
             'id': self.req_id,
             'method': 'orderbook.unsubscribe',
-            'params': [phemex_symbol]
+            'params': [symbol]
         }
         self.req_id += 1
         return message
     
-    def _convert_to_phemex_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Phemex format."""
-        if symbol == 'BTCUSDT':
-            return 'BTCUSD'  # Phemex perpetual contracts
-        elif symbol == 'ETHUSDT':
-            return 'ETHUSD'
-        else:
-            # Convert XXXUSDT to XXXUSD
-            return symbol.replace('USDT', 'USD')
-    
-    def _convert_from_phemex_symbol(self, phemex_symbol: str) -> str:
-        """Convert Phemex symbol back to standard format."""
-        if phemex_symbol == 'BTCUSD':
-            return 'BTCUSDT'
-        elif phemex_symbol == 'ETHUSD':
-            return 'ETHUSDT'
-        else:
-            # Convert XXXUSD to XXXUSDT
-            return phemex_symbol.replace('USD', 'USDT')
     
     async def handle_message(self, message):
         if not isinstance(message, dict):
@@ -117,8 +96,8 @@ class PhemexExchange(BaseExchange):
         if not phemex_symbol or not book_data:
             return
         
-        # Get symbol and convert to standard format
-        symbol = self._convert_from_phemex_symbol(phemex_symbol)
+        # Use Phemex symbol directly - mapping will handle display symbol conversion
+        symbol = phemex_symbol
         
         # Get price data from book
         bids = book_data.get('bids', [])
@@ -167,8 +146,8 @@ class PhemexExchange(BaseExchange):
         phemex_symbol = params[0]
         book_data = params[1]
         
-        # Get symbol and convert to standard format
-        symbol = self._convert_from_phemex_symbol(phemex_symbol)
+        # Use Phemex symbol directly - mapping will handle display symbol conversion
+        symbol = phemex_symbol
         
         # Get price data from book
         bids = book_data.get('bids', [])
@@ -216,5 +195,7 @@ class PhemexExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Normalize symbol to standard format."""
+        """Normalize symbol format - preserve case for cETHUSD."""
+        if symbol.startswith('c') and symbol.endswith('USD'):
+            return symbol  # Keep original case for perpetual contracts like cETHUSD
         return symbol.upper()

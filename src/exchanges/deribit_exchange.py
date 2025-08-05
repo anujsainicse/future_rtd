@@ -13,84 +13,31 @@ class DeribitExchange(BaseExchange):
         return 'wss://www.deribit.com/ws/api/v2'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # Deribit uses different symbol format for perpetual futures
-        deribit_symbol = self._convert_to_deribit_symbol(symbol)
-        
+        # Symbol is already in Deribit format from configuration
         message = {
             'jsonrpc': '2.0',
             'id': self.req_id,
             'method': 'public/subscribe',
             'params': {
-                'channels': [f'ticker.{deribit_symbol}.100ms']
+                'channels': [f'ticker.{symbol}.100ms']
             }
         }
         self.req_id += 1
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        deribit_symbol = self._convert_to_deribit_symbol(symbol)
-        
+        # Symbol is already in Deribit format from configuration
         message = {
             'jsonrpc': '2.0',
             'id': self.req_id,
             'method': 'public/unsubscribe',
             'params': {
-                'channels': [f'ticker.{deribit_symbol}.100ms']
+                'channels': [f'ticker.{symbol}.100ms']
             }
         }
         self.req_id += 1
         return message
     
-    def _convert_to_deribit_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Deribit format."""
-        # Deribit only supports certain perpetual contracts
-        symbol_mappings = {
-            'BTCUSDT': 'BTC-PERPETUAL',
-            'ETHUSDT': 'ETH-PERPETUAL',
-            'SOLUSDT': 'SOL-PERPETUAL',
-            'ADAUSDT': 'ADA-PERPETUAL',
-            'DOTUSDT': 'DOT-PERPETUAL',
-            'LINKUSDT': 'LINK-PERPETUAL',
-            'LTCUSDT': 'LTC-PERPETUAL',
-            'XRPUSDT': 'XRP-PERPETUAL',
-            'AVAXUSDT': 'AVAX-PERPETUAL',
-            'MATICUSDT': 'MATIC-PERPETUAL'
-        }
-        
-        if symbol in symbol_mappings:
-            return symbol_mappings[symbol]
-        else:
-            # For unsupported symbols, assume perpetual format but warn
-            base = symbol.replace('USDT', '')
-            logger.warning(f"Deribit symbol {symbol} not in known mappings, using {base}-PERPETUAL")
-            return f'{base}-PERPETUAL'
-    
-    def _convert_from_deribit_symbol(self, deribit_symbol: str) -> str:
-        """Convert Deribit symbol back to standard format."""
-        # Reverse mapping from Deribit to standard format
-        reverse_mappings = {
-            'BTC-PERPETUAL': 'BTCUSDT',
-            'ETH-PERPETUAL': 'ETHUSDT',
-            'SOL-PERPETUAL': 'SOLUSDT',
-            'ADA-PERPETUAL': 'ADAUSDT',
-            'DOT-PERPETUAL': 'DOTUSDT',
-            'LINK-PERPETUAL': 'LINKUSDT',
-            'LTC-PERPETUAL': 'LTCUSDT',
-            'XRP-PERPETUAL': 'XRPUSDT',
-            'AVAX-PERPETUAL': 'AVAXUSDT',
-            'MATIC-PERPETUAL': 'MATICUSDT'
-        }
-        
-        if deribit_symbol in reverse_mappings:
-            return reverse_mappings[deribit_symbol]
-        else:
-            # Fallback: Extract base currency and append USDT
-            try:
-                base = deribit_symbol.split('-')[0]
-                return f'{base}USDT'
-            except (IndexError, AttributeError):
-                logger.error(f"Failed to parse Deribit symbol: {deribit_symbol}")
-                return deribit_symbol  # Return as-is if parsing fails
     
     async def handle_message(self, message: Dict):
         # Add debug logging
@@ -132,7 +79,8 @@ class DeribitExchange(BaseExchange):
                 logger.debug(f"Deribit: Missing instrument_name in data: {data.keys()}")
                 return
             
-            symbol = self._convert_from_deribit_symbol(instrument_name)
+            # Use Deribit symbol directly - mapping will handle display symbol conversion
+            symbol = instrument_name
             
             # Get price data
             last_price = data.get('last_price')
@@ -173,5 +121,5 @@ class DeribitExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Deribit format."""
-        return self._convert_to_deribit_symbol(symbol)
+        """Normalize symbol format - keep Deribit format for output."""
+        return symbol.upper()

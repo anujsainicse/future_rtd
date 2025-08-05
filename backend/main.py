@@ -69,8 +69,11 @@ class SimplePriceFetcher:
             'coindcx': CoindcxExchange
         }
     
-    async def initialize_exchanges(self, exchange_config):
+    async def initialize_exchanges(self, config_data):
         """Initialize exchanges from config."""
+        exchange_config = config_data['exchanges']
+        config_format = config_data.get('format', 'legacy')
+        
         for exchange_name, symbols in exchange_config.items():
             if exchange_name not in self.exchange_classes:
                 continue
@@ -79,19 +82,54 @@ class SimplePriceFetcher:
             exchange = exchange_class()
             self.exchanges[exchange_name] = exchange
             
-            # Setup event handlers
-            exchange.on('price_update', self.price_manager.update_price)
+            # Setup event handlers with symbol mapping support
+            if config_format == 'symbol_ticker':
+                exchange.on('price_update', lambda data, ex=exchange_name: self._handle_price_update_with_mapping(data, ex, config_data['pairs']))
+            else:
+                exchange.on('price_update', self.price_manager.update_price)
             
             try:
                 await exchange.connect()
                 self.active_connections.add(exchange_name)
                 
-                for symbol in symbols:
-                    await exchange.subscribe(symbol)
-                    await asyncio.sleep(0.1)
+                if config_format == 'symbol_ticker':
+                    # symbols is a list of dicts with display_symbol and ticker
+                    for symbol_data in symbols:
+                        ticker = symbol_data['ticker']
+                        await exchange.subscribe(ticker)
+                        await asyncio.sleep(0.1)
+                else:
+                    # Legacy format - symbols is a list of strings
+                    for symbol in symbols:
+                        await exchange.subscribe(symbol)
+                        await asyncio.sleep(0.1)
                     
             except Exception as e:
                 logger.error(f"Failed to connect to {exchange_name}: {e}")
+    
+    def _handle_price_update_with_mapping(self, data, exchange_name, pairs):
+        """Handle price updates with ticker to display symbol mapping."""
+        ticker = data['symbol']
+        
+        # Find the display symbol for this ticker and exchange
+        display_symbol = None
+        for pair in pairs:
+            if pair['exchange'] == exchange_name and pair['ticker'] == ticker:
+                display_symbol = pair['display_symbol']
+                break
+        
+        if display_symbol:
+            # Update the data with display symbol
+            updated_data = data.copy()
+            updated_data['symbol'] = display_symbol
+            updated_data['ticker'] = ticker  # Keep original ticker for reference
+            
+            # Pass to price manager
+            self.price_manager.update_price(updated_data)
+        else:
+            # Fallback to original symbol if no mapping found
+            logger.warning(f"No display symbol mapping found for {ticker} on {exchange_name}")
+            self.price_manager.update_price(data)
     
     def get_api(self):
         """Get API interface."""
@@ -101,7 +139,8 @@ class SimplePriceFetcher:
             'get_spread': self.price_manager.get_spread,
             'get_market_summary': self.price_manager.get_market_summary,
             'get_best_prices': self.price_manager.get_best_prices,
-            'check_arbitrage_opportunities': self.price_manager.check_arbitrage_opportunities
+            'check_arbitrage_opportunities': self.price_manager.check_arbitrage_opportunities,
+            'get_arbitrage_alert_status': self.price_manager.get_arbitrage_alert_status
         }
 
 # Global variables
@@ -200,17 +239,29 @@ async def startup_event():
 async def start_price_fetcher():
     """Start the price fetcher with default symbols."""
     try:
-        # Load symbols configuration
+        # Load symbols configuration - try new format first, fallback to CSV
+        futures_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'futures_symbols.txt')
         symbols_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'symbols.csv')
-        parsed_data = await InputParser.parse_file(symbols_file)
+        
+        config_file = futures_file if os.path.exists(futures_file) else symbols_file
+        logger.info(f"Loading configuration from: {config_file}")
+        
+        parsed_data = await InputParser.parse_file(config_file)
         valid_exchanges = InputParser.validate_exchange_support(
             parsed_data['exchanges'], 
             price_fetcher.supported_exchanges
         )
         
+        # Create config data structure
+        config_data = {
+            'exchanges': valid_exchanges,
+            'format': parsed_data.get('format', 'legacy'),
+            'pairs': parsed_data.get('pairs', [])
+        }
+        
         # Initialize exchanges
-        await price_fetcher.initialize_exchanges(valid_exchanges)
-        logger.info(f"Started price fetcher with {len(valid_exchanges)} exchanges (including CoinDCX)")
+        await price_fetcher.initialize_exchanges(config_data)
+        logger.info(f"Started price fetcher with {len(valid_exchanges)} exchanges using {parsed_data.get('format', 'legacy')} format")
         
     except Exception as e:
         logger.error(f"Error starting price fetcher: {e}")
@@ -342,6 +393,20 @@ async def get_symbol_arbitrage(symbol: str, min_spread: float = 0.1):
     return {
         "symbol": symbol.upper(),
         "opportunities": opportunities,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@app.get("/api/arbitrage/{symbol}/alert-status")
+async def get_arbitrage_alert_status(symbol: str):
+    """Get arbitrage alert status for a specific symbol."""
+    if not price_fetcher:
+        return {"error": "Price fetcher not initialized"}
+    
+    api = price_fetcher.get_api()
+    status = api['get_arbitrage_alert_status'](symbol.upper())
+    
+    return {
+        **status,
         "timestamp": datetime.utcnow().isoformat()
     }
 

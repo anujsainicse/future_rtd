@@ -12,6 +12,8 @@ class PriceManager:
         self.last_updated: Dict[str, float] = {}  # symbol-exchange -> timestamp
         self.event_callbacks = {}
         self.stale_cleanup_task = None
+        self.last_arbitrage_alert: Dict[str, float] = {}  # symbol -> timestamp of last alert
+        self.arbitrage_alert_cooldown = 300.0  # 5 minutes in seconds
     
     def on(self, event: str, callback):
         """Register event callback."""
@@ -57,10 +59,50 @@ class PriceManager:
             'data': self.prices[symbol][exchange]
         })
         
-        # Check for arbitrage opportunities
-        opportunities = self.check_arbitrage_opportunities(symbol)
-        if opportunities:
+        # Check for arbitrage opportunities with rate limiting
+        opportunities = self.check_arbitrage_opportunities(symbol)  # Uses default 0.1% threshold
+        if opportunities and self._should_send_arbitrage_alert(symbol):
+            logger.info(f"Sending arbitrage alert for {symbol} - {len(opportunities)} opportunities found")
             self.emit('arbitrage_opportunity', opportunities)
+            self.last_arbitrage_alert[symbol] = time.time()
+    
+    def _should_send_arbitrage_alert(self, symbol: str) -> bool:
+        """Check if an arbitrage alert should be sent for this symbol."""
+        now = time.time()
+        last_alert_time = self.last_arbitrage_alert.get(symbol)
+        
+        # If no previous alert or cooldown period has passed, send alert
+        if last_alert_time is None:
+            return True
+        
+        return (now - last_alert_time) >= self.arbitrage_alert_cooldown
+    
+    def get_arbitrage_alert_status(self, symbol: str) -> Dict:
+        """Get arbitrage alert status for a symbol."""
+        now = time.time()
+        last_alert_time = self.last_arbitrage_alert.get(symbol)
+        
+        if last_alert_time is None:
+            return {
+                'symbol': symbol,
+                'can_send_alert': True,
+                'last_alert_time': None,
+                'seconds_until_next_alert': 0,
+                'cooldown_seconds': self.arbitrage_alert_cooldown
+            }
+        
+        time_since_last = now - last_alert_time
+        can_send = time_since_last >= self.arbitrage_alert_cooldown
+        seconds_until_next = max(0, self.arbitrage_alert_cooldown - time_since_last)
+        
+        return {
+            'symbol': symbol,
+            'can_send_alert': can_send,
+            'last_alert_time': last_alert_time,
+            'seconds_since_last_alert': time_since_last,
+            'seconds_until_next_alert': seconds_until_next,
+            'cooldown_seconds': self.arbitrage_alert_cooldown
+        }
     
     def get_prices_by_symbol(self, symbol: str) -> Optional[Dict[str, Dict]]:
         """Get all exchange prices for a symbol."""
@@ -211,6 +253,8 @@ class PriceManager:
                 stale_keys.append(key)
         
         removed_count = 0
+        symbols_to_remove = set()
+        
         for key in stale_keys:
             symbol, exchange = key.split('-', 1)
             
@@ -221,11 +265,30 @@ class PriceManager:
                 # Remove symbol if no exchanges left
                 if not self.prices[symbol]:
                     del self.prices[symbol]
+                    symbols_to_remove.add(symbol)
             
             del self.last_updated[key]
         
+        # Clean up arbitrage alert timestamps for removed symbols
+        for symbol in symbols_to_remove:
+            if symbol in self.last_arbitrage_alert:
+                del self.last_arbitrage_alert[symbol]
+        
+        # Also clean up very old arbitrage alert timestamps (older than 1 hour)
+        alert_cleanup_age = 3600.0  # 1 hour
+        stale_alert_symbols = []
+        for symbol, timestamp in self.last_arbitrage_alert.items():
+            if (now - timestamp) > alert_cleanup_age:
+                stale_alert_symbols.append(symbol)
+        
+        for symbol in stale_alert_symbols:
+            del self.last_arbitrage_alert[symbol]
+        
         if removed_count > 0:
             logger.info(f"Removed {removed_count} stale price entries")
+        
+        if stale_alert_symbols:
+            logger.info(f"Cleaned up {len(stale_alert_symbols)} old arbitrage alert timestamps")
         
         return removed_count
     

@@ -13,13 +13,11 @@ class MexcExchange(BaseExchange):
         return 'wss://contract.mexc.com/edge'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # MEXC futures use different symbol format
-        mexc_symbol = self._convert_to_mexc_symbol(symbol)
-        
+        # Symbol is already in MEXC format from configuration
         message = {
             'method': 'sub.ticker',
             'param': {
-                'symbol': mexc_symbol
+                'symbol': symbol
             },
             'id': self.req_id
         }
@@ -27,45 +25,17 @@ class MexcExchange(BaseExchange):
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        mexc_symbol = self._convert_to_mexc_symbol(symbol)
-        
+        # Symbol is already in MEXC format from configuration
         message = {
             'method': 'unsub.ticker',
             'param': {
-                'symbol': mexc_symbol
+                'symbol': symbol
             },
             'id': self.req_id
         }
         self.req_id += 1
         return message
     
-    def _convert_to_mexc_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to MEXC format."""
-        # MEXC uses underscore format for futures contracts
-        symbol_mappings = {
-            'BTCUSDT': 'BTC_USDT',
-            'ETHUSDT': 'ETH_USDT',
-            'ADAUSDT': 'ADA_USDT',
-            'BNBUSDT': 'BNB_USDT',
-            'DOTUSDT': 'DOT_USDT',
-            'LINKUSDT': 'LINK_USDT',
-            'LTCUSDT': 'LTC_USDT',
-            'XRPUSDT': 'XRP_USDT',
-            'SOLUSDT': 'SOL_USDT',
-            'AVAXUSDT': 'AVAX_USDT',
-            'MATICUSDT': 'MATIC_USDT',
-            'TRXUSDT': 'TRX_USDT'
-        }
-        
-        if symbol in symbol_mappings:
-            return symbol_mappings[symbol]
-        else:
-            # Convert XXXUSDT to XXX_USDT for other symbols
-            return symbol.replace('USDT', '_USDT')
-    
-    def _convert_from_mexc_symbol(self, mexc_symbol: str) -> str:
-        """Convert MEXC symbol back to standard format."""
-        return mexc_symbol.replace('_USDT', 'USDT')
     
     async def handle_message(self, message: Dict):
         logger.debug(f"MEXC message: {message}")
@@ -108,7 +78,8 @@ class MexcExchange(BaseExchange):
                 logger.debug(f"MEXC: Missing symbol in data: {data.keys()}")
                 return
             
-            symbol = self._convert_from_mexc_symbol(symbol_data)
+            # Use MEXC symbol directly - mapping will handle display symbol conversion
+            symbol = symbol_data
             
             # Get price data - MEXC might use different field names
             last_price = data.get('lastPrice') or data.get('last')
@@ -147,5 +118,5 @@ class MexcExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to MEXC format."""
-        return self._convert_to_mexc_symbol(symbol)
+        """Normalize symbol format - keep MEXC format for output."""
+        return symbol.upper()

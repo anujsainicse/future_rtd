@@ -13,43 +13,27 @@ class GateioExchange(BaseExchange):
         return 'wss://fx-ws.gateio.ws/v4/ws/usdt'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        # Gate.io futures use different symbol format
-        gateio_symbol = self._convert_to_gateio_symbol(symbol)
-        
+        # Symbol is already in Gate.io format from configuration
         message = {
             'time': self.req_id,
             'channel': 'futures.tickers',
             'event': 'subscribe',
-            'payload': [gateio_symbol]
+            'payload': [symbol]
         }
         self.req_id += 1
         return message
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        gateio_symbol = self._convert_to_gateio_symbol(symbol)
-        
+        # Symbol is already in Gate.io format from configuration
         message = {
             'time': self.req_id,
             'channel': 'futures.tickers',
             'event': 'unsubscribe',
-            'payload': [gateio_symbol]
+            'payload': [symbol]
         }
         self.req_id += 1
         return message
     
-    def _convert_to_gateio_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Gate.io format."""
-        if symbol == 'BTCUSDT':
-            return 'BTC_USDT'
-        elif symbol == 'ETHUSDT':
-            return 'ETH_USDT'
-        else:
-            # Convert XXXUSDT to XXX_USDT
-            return symbol.replace('USDT', '_USDT')
-    
-    def _convert_from_gateio_symbol(self, gateio_symbol: str) -> str:
-        """Convert Gate.io symbol back to standard format."""
-        return gateio_symbol.replace('_USDT', 'USDT')
     
     async def handle_message(self, message):
         # Gate.io can send both dict and list messages
@@ -131,7 +115,8 @@ class GateioExchange(BaseExchange):
             logger.debug(f"Gate.io ticker data missing contract: {data.keys()}")
             return
         
-        symbol = self._convert_from_gateio_symbol(contract)
+        # Use Gate.io symbol directly - mapping will handle display symbol conversion
+        symbol = contract
         
         # Get price data - GateIO doesn't provide bid/ask in ticker, use last price
         last_price = data.get('last')
@@ -199,5 +184,5 @@ class GateioExchange(BaseExchange):
         return message
     
     def normalize_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Gate.io format."""
-        return self._convert_to_gateio_symbol(symbol)
+        """Normalize symbol format - keep Gate.io format for output."""
+        return symbol.upper()

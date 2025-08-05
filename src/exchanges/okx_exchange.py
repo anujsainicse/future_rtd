@@ -13,39 +13,25 @@ class OKXExchange(BaseExchange):
         return 'wss://ws.okx.com:8443/ws/v5/public'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
-        formatted_symbol = self._format_symbol_for_okx(symbol)
+        # Symbol is already in OKX format from configuration
         return {
             'op': 'subscribe',
             'args': [{
                 'channel': 'books',
-                'instId': formatted_symbol
+                'instId': symbol
             }]
         }
     
     def get_unsubscribe_message(self, symbol: str) -> Dict:
-        formatted_symbol = self._format_symbol_for_okx(symbol)
+        # Symbol is already in OKX format from configuration
         return {
             'op': 'unsubscribe',
             'args': [{
                 'channel': 'books',
-                'instId': formatted_symbol
+                'instId': symbol
             }]
         }
     
-    def _format_symbol_for_okx(self, symbol: str) -> str:
-        """Format symbol for OKX (add hyphen if needed)."""
-        symbol = symbol.upper()
-        
-        if '-' in symbol:
-            return symbol
-        
-        if symbol.endswith('USDT'):
-            return symbol.replace('USDT', '-USDT')
-        
-        if symbol.endswith('USD'):
-            return symbol.replace('USD', '-USD')
-        
-        return symbol
     
     async def handle_message(self, message: Dict):
         # Handle subscription confirmation
@@ -86,10 +72,8 @@ class OKXExchange(BaseExchange):
         price = (bid + ask) / 2
         timestamp = int(book_data.get('ts', 0))
         
-        # Normalize symbol (remove hyphen for consistency)
-        normalized_symbol = symbol.replace('-', '')
-        
-        price_data = self.format_price_data(normalized_symbol, price, bid, ask, timestamp)
+        # Use OKX symbol directly - mapping will handle display symbol conversion
+        price_data = self.format_price_data(symbol, price, bid, ask, timestamp)
         self.emit('price_update', price_data)
     
     def get_ping_message(self) -> Optional[Dict]:

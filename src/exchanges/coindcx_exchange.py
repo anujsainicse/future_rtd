@@ -38,16 +38,6 @@ class CoindcxExchange(BaseExchange):
             'symbol': symbol
         }
     
-    def _convert_to_coindcx_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to CoinDCX format."""
-        # CoinDCX uses standard symbols like BTCUSDT, ETHUSDT for crypto pairs
-        # No conversion needed as they match standard format
-        return symbol.upper()
-    
-    def _convert_from_coindcx_symbol(self, coindcx_symbol: str) -> str:
-        """Convert CoinDCX symbol back to standard format."""
-        # CoinDCX uses standard symbols, so no conversion needed
-        return coindcx_symbol.upper()
     
     async def connect(self):
         """Connect to CoinDCX using REST API polling or WebSocket fallback."""
@@ -238,7 +228,8 @@ class CoindcxExchange(BaseExchange):
                         market = ticker.get('market')
                         if market:
                             # Convert to standard symbol and check if we're tracking it
-                            standard_symbol = self._convert_from_coindcx_symbol(market)
+                            # CoinDCX uses standard format, no conversion needed
+                            standard_symbol = market
                             if standard_symbol in self.target_symbols:
                                 await self._handle_rest_ticker_update(ticker)
             elif isinstance(data, dict):
@@ -246,7 +237,8 @@ class CoindcxExchange(BaseExchange):
                 market = data.get('market')
                 if market:
                     # Convert to standard symbol and check if we're tracking it
-                    standard_symbol = self._convert_from_coindcx_symbol(market)
+                    # CoinDCX uses standard format, no conversion needed
+                    standard_symbol = market
                     if standard_symbol in self.target_symbols:
                         await self._handle_rest_ticker_update(data)
                     
@@ -260,7 +252,8 @@ class CoindcxExchange(BaseExchange):
             if not market:
                 return
             
-            symbol = self._convert_from_coindcx_symbol(market)
+            # CoinDCX uses standard format, no conversion needed
+            symbol = market
             
             # Extract price data from CoinDCX ticker format
             last_price = ticker_data.get('last_price') or ticker_data.get('lastPrice')
@@ -299,7 +292,8 @@ class CoindcxExchange(BaseExchange):
             return
         
         try:
-            coindcx_symbol = self._convert_to_coindcx_symbol(symbol)
+            # CoinDCX uses standard format, no conversion needed
+            coindcx_symbol = symbol
             
             # CoinDCX subscription format - try the documented approach
             # Based on API docs, it might just need a simple subscription
@@ -325,7 +319,8 @@ class CoindcxExchange(BaseExchange):
             return
         
         try:
-            coindcx_symbol = self._convert_to_coindcx_symbol(symbol)
+            # CoinDCX uses standard format, no conversion needed
+            coindcx_symbol = symbol
             
             # Emit unsubscription request via Socket.io using CoinDCX format
             await self.sio.emit('unsubscribe', {
@@ -352,7 +347,8 @@ class CoindcxExchange(BaseExchange):
                 if market not in self.target_symbols:
                     return
                 
-                symbol = self._convert_from_coindcx_symbol(market)
+                # CoinDCX uses standard format, no conversion needed
+                symbol = market
                 
                 # Get price data from CoinDCX ticker format
                 last_price = ticker_data.get('last_price') or ticker_data.get('lastPrice') or ticker_data.get('price')
@@ -465,4 +461,5 @@ class CoindcxExchange(BaseExchange):
     
     def normalize_symbol(self, symbol: str) -> str:
         """Convert standard symbol to CoinDCX format."""
-        return self._convert_to_coindcx_symbol(symbol)
+        # CoinDCX uses standard format, no conversion needed
+        return symbol.upper()

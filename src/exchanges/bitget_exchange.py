@@ -41,28 +41,6 @@ class BitgetExchange(BaseExchange):
         }
         return message
     
-    def _convert_to_bitget_symbol(self, symbol: str) -> str:
-        """Convert standard symbol to Bitget format."""
-        # Bitget futures perpetuals use UMCBL suffix
-        # Handle common symbol mappings
-        symbol_mappings = {
-            'BTCUSDT': 'BTCUSDT_UMCBL',
-            'ETHUSDT': 'ETHUSDT_UMCBL',
-            'ADAUSDT': 'ADAUSDT_UMCBL',
-            'BNBUSDT': 'BNBUSDT_UMCBL',
-            'DOTUSDT': 'DOTUSDT_UMCBL',
-            'LINKUSDT': 'LINKUSDT_UMCBL',
-            'LTCUSDT': 'LTCUSDT_UMCBL',
-            'XRPUSDT': 'XRPUSDT_UMCBL',
-            'SOLUSDT': 'SOLUSDT_UMCBL',
-            'AVAXUSDT': 'AVAXUSDT_UMCBL'
-        }
-        
-        return symbol_mappings.get(symbol, f"{symbol}_UMCBL")
-    
-    def _convert_from_bitget_symbol(self, bitget_symbol: str) -> str:
-        """Convert Bitget symbol back to standard format."""
-        return bitget_symbol.replace('_UMCBL', '')
     
     async def handle_message(self, message):
         if not isinstance(message, dict):

@@ -125,6 +125,10 @@
     @apply exchange-badge bg-pink-900 text-pink-300;
   }
   
+  .exchange-coindcx {
+    @apply exchange-badge bg-violet-900 text-violet-300;
+  }
+  
   .loading-skeleton {
     @apply animate-pulse bg-gray-800 rounded;
   }

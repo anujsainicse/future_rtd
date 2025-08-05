@@ -21,8 +21,8 @@ class CoindcxExchange(BaseExchange):
         self.use_rest_fallback = True  # Use REST API as primary method
     
     def get_websocket_url(self) -> str:
-        # CoinDCX uses Socket.io, return the Socket.io endpoint
-        return 'wss://stream.coindcx.com'
+        # CoinDCX uses Socket.io, return the correct Socket.io endpoint
+        return 'https://stream.coindcx.com'
     
     def get_subscribe_message(self, symbol: str) -> Dict:
         # Socket.io subscription will be handled differently
@@ -41,7 +41,6 @@ class CoindcxExchange(BaseExchange):
     def _convert_to_coindcx_symbol(self, symbol: str) -> str:
         """Convert standard symbol to CoinDCX format."""
         # CoinDCX uses standard symbols like BTCUSDT, ETHUSDT for crypto pairs
-        # and BTCINR, ETHINR for INR pairs
         # No conversion needed as they match standard format
         return symbol.upper()
     
@@ -61,6 +60,15 @@ class CoindcxExchange(BaseExchange):
             if self.use_rest_fallback:
                 # Use REST API polling approach
                 logger.info("Using REST API polling for CoinDCX market data")
+                
+                # Test the REST API first
+                try:
+                    await self._test_rest_api()
+                    logger.info("CoinDCX REST API test successful")
+                except Exception as e:
+                    logger.error(f"CoinDCX REST API test failed: {e}")
+                    raise
+                
                 self.is_connected = True
                 
                 # Start polling task
@@ -69,7 +77,8 @@ class CoindcxExchange(BaseExchange):
                 logger.info(f"Connected to CoinDCX successfully")
                 return True
             else:
-                # Fallback to WebSocket approach
+                # Fallback to WebSocket approach (currently experimental)
+                logger.warning("REST API approach failed, trying WebSocket (experimental)")
                 return await self._connect_websocket()
             
         except Exception as e:
@@ -100,11 +109,12 @@ class CoindcxExchange(BaseExchange):
             self.sio.on('error', self._on_socketio_error)
             self.sio.on('*', self._on_any_event)  # Catch all events
             
-            # Connect to CoinDCX Socket.io server with specific transport
+            # Connect to CoinDCX Socket.io server with correct configuration
             await self.sio.connect(
                 self.get_websocket_url(),
-                transports=['websocket'],
-                wait_timeout=10
+                transports=['websocket', 'polling'],  # Allow both transport methods
+                wait_timeout=15,
+                namespaces=['/']  # Connect to default namespace
             )
             
             # Mark as connected
@@ -157,6 +167,34 @@ class CoindcxExchange(BaseExchange):
         if isinstance(data, dict) and any(key in data for key in ['price', 'last_price', 'lastPrice', 'market', 'symbol']):
             await self._handle_ticker_update(data)
     
+    async def _test_rest_api(self):
+        """Test the CoinDCX REST API connection."""
+        try:
+            url = "https://public.coindcx.com/exchange/ticker"
+            timeout = aiohttp.ClientTimeout(total=10)
+            
+            async with self.session.get(url, timeout=timeout) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if isinstance(data, list) and len(data) > 0:
+                        logger.debug(f"CoinDCX API test successful, got {len(data)} tickers")
+                        # Log some sample tickers for debugging
+                        for i, ticker in enumerate(data[:3]):  # First 3 tickers
+                            market = ticker.get('market', 'unknown')
+                            price = ticker.get('last_price', 'unknown')
+                            logger.debug(f"Sample ticker {i+1}: {market} = {price}")
+                        return True
+                    else:
+                        logger.warning("CoinDCX API returned empty or invalid data")
+                        return False
+                else:
+                    logger.error(f"CoinDCX API test failed with status {response.status}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"CoinDCX API test failed: {e}")
+            raise
+
     async def _polling_loop(self):
         """Polling loop for REST API data."""
         while self.is_connected and not self.is_shutting_down:
@@ -174,13 +212,19 @@ class CoindcxExchange(BaseExchange):
             # CoinDCX ticker endpoint
             url = "https://public.coindcx.com/exchange/ticker"
             
-            async with self.session.get(url) as response:
+            timeout = aiohttp.ClientTimeout(total=10)  # 10 second timeout
+            async with self.session.get(url, timeout=timeout) as response:
                 if response.status == 200:
                     data = await response.json()
                     await self._process_ticker_response(data)
+                elif response.status == 429:
+                    logger.warning("CoinDCX API rate limit hit, backing off")
+                    await asyncio.sleep(5)  # Wait 5 seconds on rate limit
                 else:
                     logger.warning(f"CoinDCX API returned status {response.status}")
                     
+        except asyncio.TimeoutError:
+            logger.warning("CoinDCX API request timed out")
         except Exception as e:
             logger.error(f"Error fetching CoinDCX ticker data: {e}")
     
@@ -192,13 +236,19 @@ class CoindcxExchange(BaseExchange):
                 for ticker in data:
                     if isinstance(ticker, dict):
                         market = ticker.get('market')
-                        if market and market in self.target_symbols:
-                            await self._handle_rest_ticker_update(ticker)
+                        if market:
+                            # Convert to standard symbol and check if we're tracking it
+                            standard_symbol = self._convert_from_coindcx_symbol(market)
+                            if standard_symbol in self.target_symbols:
+                                await self._handle_rest_ticker_update(ticker)
             elif isinstance(data, dict):
                 # Single ticker response
                 market = data.get('market')
-                if market and market in self.target_symbols:
-                    await self._handle_rest_ticker_update(data)
+                if market:
+                    # Convert to standard symbol and check if we're tracking it
+                    standard_symbol = self._convert_from_coindcx_symbol(market)
+                    if standard_symbol in self.target_symbols:
+                        await self._handle_rest_ticker_update(data)
                     
         except Exception as e:
             logger.error(f"Error processing CoinDCX ticker response: {e}")

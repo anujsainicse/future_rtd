@@ -160,6 +160,8 @@ const PriceTable: React.FC<PriceTableProps> = ({ prices, onSymbolClick }) => {
         return 'exchange-bitmex';
       case 'phemex':
         return 'exchange-phemex';
+      case 'coindcx':
+        return 'exchange-coindcx';
       default:
         return 'exchange-badge bg-gray-700 text-gray-300';
     }

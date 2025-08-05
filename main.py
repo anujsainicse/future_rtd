@@ -15,6 +15,14 @@ from src.price_manager import PriceManager
 from src.exchanges.binance_exchange import BinanceExchange
 from src.exchanges.bybit_exchange import BybitExchange
 from src.exchanges.okx_exchange import OKXExchange
+from src.exchanges.kucoin_exchange import KucoinExchange
+from src.exchanges.deribit_exchange import DeribitExchange
+from src.exchanges.bitget_exchange import BitgetExchange
+from src.exchanges.gateio_exchange import GateioExchange
+from src.exchanges.mexc_exchange import MexcExchange
+from src.exchanges.bitmex_exchange import BitmexExchange
+from src.exchanges.phemex_exchange import PhemexExchange
+from src.exchanges.coindcx_exchange import CoindcxExchange
 
 # Configure logging
 logging.basicConfig(
@@ -32,11 +40,19 @@ class CryptoFuturesPriceFetcher:
         self.is_shutting_down = False
         self.stale_cleanup_task = None
         
-        self.supported_exchanges = ['binance', 'bybit', 'okx']
+        self.supported_exchanges = ['binance', 'bybit', 'okx', 'kucoin', 'deribit', 'bitget', 'gateio', 'mexc', 'bitmex', 'phemex', 'coindcx']
         self.exchange_classes = {
             'binance': BinanceExchange,
             'bybit': BybitExchange,
-            'okx': OKXExchange
+            'okx': OKXExchange,
+            'kucoin': KucoinExchange,
+            'deribit': DeribitExchange,
+            'bitget': BitgetExchange,
+            'gateio': GateioExchange,
+            'mexc': MexcExchange,
+            'bitmex': BitmexExchange,
+            'phemex': PhemexExchange,
+            'coindcx': CoindcxExchange
         }
         
         self._setup_event_handlers()

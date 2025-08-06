@@ -94,15 +94,21 @@ class SimplePriceFetcher:
                 
                 if config_format == 'symbol_ticker':
                     # symbols is a list of dicts with display_symbol and ticker
-                    for symbol_data in symbols:
+                    for i, symbol_data in enumerate(symbols):
                         ticker = symbol_data['ticker']
                         await exchange.subscribe(ticker)
-                        await asyncio.sleep(0.1)
+                        # Increase delay for exchanges with many symbols
+                        delay = 0.5 if len(symbols) > 30 else 0.2
+                        if i < len(symbols) - 1:
+                            await asyncio.sleep(delay)
                 else:
                     # Legacy format - symbols is a list of strings
-                    for symbol in symbols:
+                    for i, symbol in enumerate(symbols):
                         await exchange.subscribe(symbol)
-                        await asyncio.sleep(0.1)
+                        # Increase delay for exchanges with many symbols
+                        delay = 0.5 if len(symbols) > 30 else 0.2
+                        if i < len(symbols) - 1:
+                            await asyncio.sleep(delay)
                     
             except Exception as e:
                 logger.error(f"Failed to connect to {exchange_name}: {e}")

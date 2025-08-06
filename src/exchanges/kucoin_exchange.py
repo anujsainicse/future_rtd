@@ -1,5 +1,8 @@
 import logging
-import aiohttp
+import asyncio
+import json
+import urllib.request
+import urllib.parse
 from typing import Dict, Optional
 from .base_exchange import BaseExchange
 
@@ -13,36 +16,52 @@ class KucoinExchange(BaseExchange):
         self.req_id = 1
     
     async def get_websocket_token(self):
-        """Get WebSocket token from KuCoin API."""
+        """Get WebSocket token from KuCoin API using urllib."""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post('https://api.kucoin.com/api/v1/bullet-public') as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data.get('code') == '200000':
-                            token_data = data['data']
-                            self.token = token_data['token']
-                            instance_servers = token_data.get('instanceServers', [])
-                            if instance_servers:
-                                self.endpoint = instance_servers[0]['endpoint']
-                                logger.info(f"KuCoin WebSocket token obtained successfully")
-                                return True
-                            else:
-                                logger.error("KuCoin API returned no instance servers")
-                                return False
-                        else:
-                            logger.error(f"KuCoin API error: {data.get('msg', 'Unknown error')}")
-                            return False
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"Failed to get KuCoin WebSocket token. Status: {response.status}, Response: {error_text}")
-                        return False
-        except aiohttp.ClientError as e:
-            logger.error(f"HTTP error getting KuCoin WebSocket token: {e}")
-            return False
+            # Run the synchronous urllib request in a thread pool
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, self._fetch_token_sync)
+            
+            if data and data.get('code') == '200000':
+                token_data = data['data']
+                self.token = token_data['token']
+                instance_servers = token_data.get('instanceServers', [])
+                if instance_servers:
+                    self.endpoint = instance_servers[0]['endpoint']
+                    logger.info(f"KuCoin WebSocket token obtained successfully")
+                    return True
+                else:
+                    logger.error("KuCoin API returned no instance servers")
+                    return False
+            else:
+                logger.error(f"KuCoin API error: {data.get('msg', 'Unknown error') if data else 'No response'}")
+                return False
+                
         except Exception as e:
-            logger.error(f"Unexpected error getting KuCoin WebSocket token: {e}")
+            logger.error(f"Error getting KuCoin WebSocket token: {e}")
             return False
+    
+    def _fetch_token_sync(self):
+        """Synchronous token fetch using urllib."""
+        try:
+            # Create POST request for KuCoin token
+            url = 'https://api.kucoin.com/api/v1/bullet-public'
+            data = urllib.parse.urlencode({}).encode('utf-8')
+            
+            request = urllib.request.Request(url, data=data, method='POST')
+            request.add_header('Content-Type', 'application/x-www-form-urlencoded')
+            
+            with urllib.request.urlopen(request, timeout=10) as response:
+                if response.status == 200:
+                    response_data = response.read().decode('utf-8')
+                    return json.loads(response_data)
+                else:
+                    logger.error(f"Failed to get KuCoin token. Status: {response.status}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"HTTP error getting KuCoin token: {e}")
+            return None
     
     def get_websocket_url(self) -> str:
         if not self.endpoint or not self.token:

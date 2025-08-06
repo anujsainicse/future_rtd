@@ -27,6 +27,8 @@ from src.exchanges.mexc_exchange import MexcExchange
 from src.exchanges.bitmex_exchange import BitmexExchange
 from src.exchanges.phemex_exchange import PhemexExchange
 from src.exchanges.coindcx_exchange import CoindcxExchange
+from src.exchanges.hyperliquid_exchange import HyperliquidExchange
+from src.exchanges.dydx_exchange import DydxExchange
 from src.utils.input_parser import InputParser
 
 # Configure logging
@@ -54,7 +56,7 @@ class SimplePriceFetcher:
         self.price_manager = PriceManager()
         self.exchanges = {}
         self.active_connections = set()
-        self.supported_exchanges = ['binance', 'bybit', 'okx', 'kucoin', 'deribit', 'bitget', 'gateio', 'mexc', 'bitmex', 'phemex', 'coindcx']
+        self.supported_exchanges = ['binance', 'bybit', 'okx', 'kucoin', 'deribit', 'bitget', 'gateio', 'mexc', 'bitmex', 'phemex', 'coindcx', 'hyperliquid', 'dydx']
         self.exchange_classes = {
             'binance': BinanceExchange,
             'bybit': BybitExchange,
@@ -66,7 +68,9 @@ class SimplePriceFetcher:
             'mexc': MexcExchange,
             'bitmex': BitmexExchange,
             'phemex': PhemexExchange,
-            'coindcx': CoindcxExchange
+            'coindcx': CoindcxExchange,
+            'hyperliquid': HyperliquidExchange,
+            'dydx': DydxExchange
         }
     
     async def initialize_exchanges(self, config_data):
